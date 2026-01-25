@@ -1,0 +1,65 @@
+# PRD: XLSX Skill for Claude Code (and compatible Agents)
+
+## 1. Overview
+The XLSX skill is a "drop-in" extension for agents (Claude Code, opencode, Taskmaster) that enables native interaction with Excel files. It follows the **Claude Skill** architecture (using a `SKILL.md` for definition) and leverages Python scripts for logic. The skill triggers automatically when `.xlsx` files are mentioned in a prompt.
+
+## 2. Core Requirements
+- **Read/Write Support**: Full support for reading and writing .xlsx files using `openpyxl`.
+- **Headless Recalculation**: Recalculate all formulas in a workbook without Excel installed using the `formulas` library.
+- **Formula Error Detection**: Detect common Excel errors (e.g., #REF!, #DIV/0!) and circular references.
+- **Cell Manipulation**: Update cell values and formulas programmatically.
+- **Auto-Triggering**: Trigger tools automatically based on the presence of `.xlsx` files in the prompt.
+- **Installation**: Simple drop-in of `SKILL.md` and associated Python scripts into the `.claude` user folder.
+
+## 3. Technology Stack
+- **Primary Language**: Python 3.x
+- **Core Library (I/O)**: `openpyxl`
+- **Calculation Engine**: `formulas` (Python library)
+- **Skill Definition**: `SKILL.md` (Markdown-based skill specification for Claude Code/opencode)
+
+## 4. Proposed Skill API (Tools)
+The skill will expose the following tools via `SKILL.md`:
+
+### `xlsx_read`
+- **Description**: Reads values and formulas from a spreadsheet.
+- **Inputs**: `file_path` (string), `sheet_name` (optional string).
+
+### `xlsx_edit`
+- **Description**: Updates specific cells or ranges in a spreadsheet.
+- **Inputs**: `file_path` (string), `sheet_name` (string), `updates` (list of cell/value objects).
+
+### `xlsx_recalculate`
+- **Description**: Forces a full recalculation of all formulas in the workbook and updates the cached values.
+- **Inputs**: `file_path` (string).
+
+### `xlsx_check_errors`
+- **Description**: Scans the workbook for formula errors or broken links.
+- **Inputs**: `file_path` (string).
+
+## 5. Implementation Plan
+
+### Phase 1: Python Engine
+- Develop a robust Python script to handle the heavy lifting (recalculation, parsing).
+- Ensure it handles errors gracefully and returns JSON output.
+
+### Phase 2: SKILL.md Specification
+- Define the skill using the `SKILL.md` format.
+- Map the tools to the Python script execution via `bash` commands.
+- Provide clear instructions to the agent on when to trigger these tools.
+
+### Phase 3: Deployment
+- Verify the "drop-in" behavior by placing the files in the appropriate agent directory.
+- Test with sample spreadsheets.
+
+## 6. Technical Integration
+- **Architecture**: The agent reads the `SKILL.md` to understand available tools. When a tool is invoked, the agent executes the Python script via its internal `bash` capability.
+- **Triggering**: LLM uses the tool descriptions to decide when to call `xlsx_read` or `xlsx_recalculate`.
+- **Environment**: Requires Python 3 and relevant packages (`openpyxl`, `formulas`).
+
+## 7. Constraints & Limitations
+- Recalculation engine (`formulas`) does not support 100% of Excel's function library or VBA.
+- Performance may vary with very large workbooks.
+
+
+## links
+[Anthropic Skills on Github](https://github.com/anthropics/skills)

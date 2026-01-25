@@ -1,0 +1,201 @@
+# XLSX Skill: Technical Analysis & Library Evaluation
+
+## Executive Summary
+Based on research of Python libraries for Excel manipulation, `openpyxl` + `formulas` is confirmed as the optimal stack for a headless XLSX skill that supports reading, editing, and recalculating spreadsheets.
+
+## Library Analysis
+
+### openpyxl (v3.1.5)
+**Status:** Production/Stable  
+**License:** MIT  
+**Python:** >=3.8
+
+#### Capabilities
+- **Read/Write**: Full support for .xlsx/.xlsm files
+- **Cell Access**: Direct cell manipulation via `ws['A1']` syntax
+- **Formulas**: Reads formula strings but does NOT evaluate them
+- **Preservation**: Maintains styles, formatting, and metadata
+- **Performance**: Optimized for large files with read-only and write-only modes
+
+#### Limitations
+- No formula evaluation/recalculation
+- Does not support legacy .xls format
+- Requires `defusedxml` for security (quadratic blowup protection)
+
+#### Sample Usage
+```python
+from openpyxl import Workbook, load_workbook
+
+# Read existing workbook
+wb = load_workbook('data.xlsx')
+ws = wb.active
+
+# Read values
+value = ws['A1'].value
+formula = ws['B2'].value  # Returns formula string like "=SUM(A1:A10)"
+
+# Write values
+ws['C1'] = 42
+ws['C2'] = '=A1+B1'
+
+# Save
+wb.save('output.xlsx')
+```
+
+### formulas (v1.3.3)
+**Status:** Production/Stable  
+**License:** EUPL 1.1  
+**Python:** 3.6-3.13
+
+#### Capabilities
+- **Parser**: Parses Excel formula strings into AST
+- **Compiler**: Compiles formulas into executable Python functions
+- **Evaluator**: Evaluates formulas using numpy for performance
+- **ExcelModel**: Load entire workbooks and compute all formulas
+- **Dependency Graph**: Builds computation graphs for formula dependencies
+- **Circular References**: Supports circular reference detection and resolution
+- **Custom Functions**: Extensible function library
+
+#### Supported Functions
+- **Math**: SUM, AVERAGE, MAX, MIN, ABS, ROUND, etc.
+- **Logic**: IF, AND, OR, NOT, IFERROR
+- **Lookup**: VLOOKUP, HLOOKUP, INDEX, MATCH
+- **Text**: CONCATENATE, LEFT, RIGHT, MID, LEN
+- **Date/Time**: DATE, NOW, TODAY, YEAR, MONTH, DAY
+- **Financial**: NPV, IRR, PMT (limited support)
+
+#### Limitations
+- Not 100% coverage of Excel functions (VBA macros not supported)
+- Complex array formulas may have edge cases
+- Performance degrades with very large workbooks (100k+ cells)
+
+#### Sample Usage
+```python
+import formulas
+
+# Method 1: Parse and compile a single formula
+func = formulas.Parser().ast('=(A1 + B1) / 2')[1].compile()
+result = func(10, 20)  # Returns 15.0
+
+# Method 2: Load and calculate an entire workbook
+xl_model = formulas.ExcelModel().loads('data.xlsx').finish()
+xl_model.calculate()
+xl_model.write(dirpath='output')
+
+# Method 3: Partial model (extract specific cells)
+xl = formulas.ExcelModel().from_ranges(
+    "'[data.xlsx]Sheet1'!C2:C10"
+)
+xl.calculate()
+```
+
+## Integration Strategy
+
+### Architecture
+1. **I/O Layer**: Use `openpyxl` for reading/writing .xlsx files
+2. **Calculation Layer**: Use `formulas` for recalculation
+3. **Bridge**: Create a wrapper that combines both libraries
+
+### Workflow for Recalculation
+```python
+import openpyxl
+import formulas
+
+def recalculate_workbook(file_path):
+    # Step 1: Load with formulas library
+    xl_model = formulas.ExcelModel().loads(file_path).finish()
+    
+    # Step 2: Calculate all formulas
+    solution = xl_model.calculate()
+    
+    # Step 3: Write back with updated cached values
+    xl_model.write(dirpath='.')
+    
+    return solution
+```
+
+### Error Detection Strategy
+```python
+def check_formula_errors(file_path):
+    errors = []
+    
+    # Load workbook
+    xl_model = formulas.ExcelModel().loads(file_path).finish()
+    
+    # Calculate and catch errors
+    try:
+        solution = xl_model.calculate()
+        
+        # Check for Excel error values in results
+        for cell_ref, value in solution.items():
+            if isinstance(value, str) and value.startswith('#'):
+                errors.append({
+                    'cell': cell_ref,
+                    'error': value,
+                    'type': 'formula_error'
+                })
+    except Exception as e:
+        errors.append({
+            'type': 'calculation_error',
+            'message': str(e)
+        })
+    
+    return errors
+```
+
+## Skill Design Recommendations
+
+### Tool 1: `xlsx_read`
+- Use `openpyxl.load_workbook()` for file reading
+- Return both values and formula strings
+- Support range selection
+- JSON output format
+
+### Tool 2: `xlsx_edit`
+- Use `openpyxl` to modify cells
+- Validate cell references before writing
+- Support batch updates
+- Preserve formatting
+
+### Tool 3: `xlsx_recalculate`
+- Use `formulas.ExcelModel()` for full recalculation
+- Update cached values in the workbook
+- Return calculation summary
+- Handle circular references with `circular=True` flag
+
+### Tool 4: `xlsx_check_errors`
+- Scan for `#REF!`, `#DIV/0!`, `#VALUE!`, etc.
+- Detect circular references
+- Validate formula syntax
+- Return structured error report
+
+## Performance Considerations
+
+### Memory Management
+- For large files (>10MB), use `openpyxl` read-only mode
+- Limit `formulas` to specific ranges when possible
+- Consider streaming for very large datasets
+
+### Optimization Tips
+- Cache loaded workbooks for multiple operations
+- Use partial model extraction (`from_ranges`) when only specific cells are needed
+- Batch cell updates before saving
+
+## Security Considerations
+- Install `defusedxml` to prevent XML attacks
+- Validate file paths to prevent directory traversal
+- Limit file size for processing (e.g., max 50MB)
+- Sanitize user inputs for cell references
+
+## Dependencies
+```txt
+openpyxl>=3.1.0
+formulas[excel]>=1.3.0
+defusedxml>=0.7.0
+```
+
+## Next Steps
+1. Create Python scripts for each tool
+2. Define SKILL.md with tool descriptions
+3. Test with sample spreadsheets
+4. Package as a distributable skill
