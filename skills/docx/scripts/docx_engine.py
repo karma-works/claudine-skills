@@ -194,6 +194,8 @@ def find_replace(path, find_text, replace_text):
     """
     Find and replace text throughout the document
     
+    Handles text split across multiple runs by reconstructing paragraph text.
+    
     Args:
         path: Path to .docx file
         find_text: Text to find
@@ -206,25 +208,55 @@ def find_replace(path, find_text, replace_text):
     
     replacements = 0
     
+    def replace_in_paragraph(para):
+        nonlocal replacements
+        if find_text not in para.text:
+            return
+        
+        # Collect all text and formatting info from runs
+        runs_info = []
+        full_text = ""
+        for run in para.runs:
+            runs_info.append({
+                'text': run.text,
+                'bold': run.bold,
+                'italic': run.italic,
+                'underline': run.underline,
+                'font_name': run.font.name,
+                'font_size': run.font.size
+            })
+            full_text += run.text
+        
+        # Perform replacement on full text
+        if find_text not in full_text:
+            return
+        
+        new_text = full_text.replace(find_text, replace_text)
+        replacements += full_text.count(find_text)
+        
+        # Clear all runs and add new text with formatting from first run
+        para.clear()
+        if runs_info:
+            # Use formatting from first run for the new text
+            new_run = para.add_run(new_text)
+            new_run.bold = runs_info[0]['bold']
+            new_run.italic = runs_info[0]['italic']
+            new_run.underline = runs_info[0]['underline']
+            if runs_info[0]['font_name']:
+                new_run.font.name = runs_info[0]['font_name']
+            if runs_info[0]['font_size']:
+                new_run.font.size = runs_info[0]['font_size']
+    
     # Search in paragraphs
     for para in doc.paragraphs:
-        if find_text in para.text:
-            # Replace in each run to preserve formatting
-            for run in para.runs:
-                if find_text in run.text:
-                    run.text = run.text.replace(find_text, replace_text)
-                    replacements += 1
+        replace_in_paragraph(para)
     
     # Search in tables
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    if find_text in para.text:
-                        for run in para.runs:
-                            if find_text in run.text:
-                                run.text = run.text.replace(find_text, replace_text)
-                                replacements += 1
+                    replace_in_paragraph(para)
     
     save_document_safe(doc, path)
     
@@ -344,13 +376,13 @@ def create_document(path):
 
 def add_table(path, rows, cols, position=None, data=None):
     """
-    Add a new table to the document
+    Add a new table to the document at a specific position
     
     Args:
         path: Path to .docx file
         rows: Number of rows
         cols: Number of columns
-        position: Optional position to insert (0 = beginning, 'end' = append)
+        position: Optional position to insert (0 = beginning, 'end' = append, or paragraph index)
         data: Optional JSON array of row data
         
     Returns:
@@ -361,8 +393,52 @@ def add_table(path, rows, cols, position=None, data=None):
     if rows < 1 or cols < 1:
         raise ValueError("Rows and columns must be at least 1")
     
-    # Create table
-    table = doc.add_table(rows=rows, cols=cols)
+    # Parse position
+    insert_after_para = None
+    if position is None or position == "end":
+        # Append to end - add paragraph then table
+        insert_after_para = len(doc.paragraphs) - 1 if doc.paragraphs else None
+        if insert_after_para is None or insert_after_para < 0:
+            # No paragraphs, add one first
+            doc.add_paragraph()
+            insert_after_para = 0
+    else:
+        try:
+            pos_idx = int(position)
+            if pos_idx < 0:
+                pos_idx = 0
+            if pos_idx > len(doc.paragraphs):
+                pos_idx = len(doc.paragraphs)
+            insert_after_para = pos_idx - 1
+            
+            # If inserting at beginning, we need a reference point
+            if insert_after_para < 0:
+                # Insert at very beginning - add a paragraph first
+                if doc.paragraphs:
+                    insert_after_para = -1  # Special marker for beginning
+                else:
+                    doc.add_paragraph()
+                    insert_after_para = 0
+        except ValueError:
+            raise ValueError(f"Position must be an integer or 'end', got: {position}")
+    
+    # Create table at the specified position
+    if insert_after_para == -1:
+        # Insert at beginning - add table after first paragraph, then move it
+        table = doc.add_table(rows=rows, cols=cols)
+        # Move table to beginning by inserting before first paragraph's element
+        if doc.paragraphs:
+            first_para = doc.paragraphs[0]._element
+            table._element.getparent().insert(first_para.getparent().index(first_para), table._element)
+    elif insert_after_para >= 0 and insert_after_para < len(doc.paragraphs):
+        # Insert after specified paragraph
+        table = doc.add_table(rows=rows, cols=cols)
+        ref_para = doc.paragraphs[insert_after_para]._element
+        # Move table after the reference paragraph
+        table._element.getparent().insert(ref_para.getparent().index(ref_para) + 1, table._element)
+    else:
+        # Append to end
+        table = doc.add_table(rows=rows, cols=cols)
     
     # Fill with data if provided
     if data:
@@ -375,15 +451,6 @@ def add_table(path, rows, cols, position=None, data=None):
                             table.rows[row_idx].cells[col_idx].text = str(cell_text)
         except Exception as e:
             pass  # Ignore data parsing errors
-    
-    # Move to position if specified
-    if position is not None and position != "end":
-        try:
-            pos_idx = int(position)
-            # Move table to position (complex in python-docx, simplified here)
-            pass
-        except ValueError:
-            pass
     
     save_document_safe(doc, path)
     

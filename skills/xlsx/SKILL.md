@@ -23,13 +23,27 @@ All tools output JSON. The xlsx_engine.py script location is relative to this sk
 Extract values and formulas from a worksheet.
 
 ```bash
-python3 scripts/xlsx_engine.py read --path FILE_PATH [--sheet SHEET_NAME]
+python3 scripts/xlsx_engine.py read --path FILE_PATH [--sheet SHEET_NAME] [--range RANGE]
 ```
 
 - `FILE_PATH`: Path to .xlsx file
 - `SHEET_NAME`: Optional, defaults to active sheet
+- `RANGE`: Optional cell range (e.g., "A1:B10", "A1", "C:C", "3:5"). Without range, reads all cells with values.
 
 Returns: JSON with sheet name and cells array (coordinates, values, formulas)
+
+### xlsx_create
+
+Create a new Excel workbook.
+
+```bash
+python3 scripts/xlsx_engine.py create --path FILE_PATH [--sheet SHEET_NAME]
+```
+
+- `FILE_PATH`: Path for the new .xlsx file
+- `SHEET_NAME`: Optional name for the first sheet (default: "Sheet1")
+
+Returns: JSON with creation status
 
 ### xlsx_edit
 

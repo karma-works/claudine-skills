@@ -62,13 +62,15 @@ def save_workbook_safe(wb, path):
         raise Exception(f"Error saving workbook: {e}") from e
 
 
-def read_sheet(path, sheet_name=None):
+def read_sheet(path, sheet_name=None, range_str=None):
     """
     Extract values and formulas from a specific sheet
     
     Args:
         path: Path to the .xlsx file
         sheet_name: Name of the sheet to read (None = active sheet)
+        range_str: Optional range to read (e.g., "A1:B10", "A1", "C:C", "3:5")
+                  If not specified, reads all cells with values
         
     Returns:
         dict: Contains sheet info, cells with coordinates, values, and formulas
@@ -86,12 +88,62 @@ def read_sheet(path, sheet_name=None):
     
     result = {
         "sheet_name": sheet_name,
+        "range": range_str,
         "cells": []
     }
     
-    # Iterate through all cells
-    for row in sheet.iter_rows():
-        for cell in row:
+    # If range is specified, use it
+    if range_str:
+        from openpyxl.utils import get_column_letter
+        
+        range_str = range_str.strip()
+        
+        # Handle different range formats
+        if ':' in range_str:
+            # Range like A1:B10 or C:C or 3:5
+            parts = range_str.split(':')
+            if len(parts) != 2:
+                raise ValueError(f"Invalid range format: {range_str}. Expected format like 'A1:B10' or 'A:A'")
+            
+            start_ref, end_ref = parts[0].strip(), parts[1].strip()
+            
+            # Parse start reference
+            if start_ref.isdigit():
+                # Row range like 3:5
+                min_row, max_row = int(start_ref), int(end_ref)
+                min_col, max_col = 1, sheet.max_column if sheet.max_column > 0 else 1
+            elif start_ref.isalpha():
+                # Column range like C:C
+                min_col = column_letter_to_index(start_ref)
+                max_col = column_letter_to_index(end_ref)
+                min_row, max_row = 1, sheet.max_row if sheet.max_row > 0 else 1
+            else:
+                # Cell range like A1:B10
+                start_match = parse_cell_ref(start_ref)
+                end_match = parse_cell_ref(end_ref)
+                min_row = min(start_match['row'], end_match['row'])
+                max_row = max(start_match['row'], end_match['row'])
+                min_col = min(start_match['col'], end_match['col'])
+                max_col = max(start_match['col'], end_match['col'])
+            
+            # Iterate through the specified range
+            for row_idx in range(min_row, max_row + 1):
+                for col_idx in range(min_col, max_col + 1):
+                    cell = sheet.cell(row=row_idx, column=col_idx)
+                    if cell.value is not None:
+                        cell_data = {
+                            "cell": cell.coordinate,
+                            "value": cell.value
+                        }
+                        
+                        # Check if it's a formula
+                        if isinstance(cell.value, str) and cell.value.startswith('='):
+                            cell_data["formula"] = cell.value
+                        
+                        result["cells"].append(cell_data)
+        else:
+            # Single cell like A1
+            cell = sheet[range_str]
             if cell.value is not None:
                 cell_data = {
                     "cell": cell.coordinate,
@@ -103,7 +155,52 @@ def read_sheet(path, sheet_name=None):
                     cell_data["formula"] = cell.value
                 
                 result["cells"].append(cell_data)
+    else:
+        # Iterate through all cells (original behavior)
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.value is not None:
+                    cell_data = {
+                        "cell": cell.coordinate,
+                        "value": cell.value
+                    }
+                    
+                    # Check if it's a formula
+                    if isinstance(cell.value, str) and cell.value.startswith('='):
+                        cell_data["formula"] = cell.value
+                    
+                    result["cells"].append(cell_data)
     
+    return result
+
+
+def parse_cell_ref(ref):
+    """Parse a cell reference like 'A1' into {'col': 1, 'row': 1}"""
+    ref = ref.strip().upper()
+    col_str = ''
+    row_str = ''
+    
+    for char in ref:
+        if char.isalpha():
+            col_str += char
+        else:
+            row_str += char
+    
+    if not col_str or not row_str:
+        raise ValueError(f"Invalid cell reference: {ref}")
+    
+    col = column_letter_to_index(col_str)
+    row = int(row_str)
+    
+    return {'col': col, 'row': row}
+
+
+def column_letter_to_index(col_str):
+    """Convert column letter(s) to column index (e.g., 'A' -> 1, 'Z' -> 26, 'AA' -> 27)"""
+    col_str = col_str.upper()
+    result = 0
+    for char in col_str:
+        result = result * 26 + (ord(char) - ord('A') + 1)
     return result
 
 
@@ -269,6 +366,34 @@ def check_errors(path):
     }
 
 
+def create_workbook(path, sheet_name="Sheet1"):
+    """
+    Create a new Excel workbook with an optional sheet name
+    
+    Args:
+        path: Path for the new .xlsx file
+        sheet_name: Name for the first sheet (default: "Sheet1")
+        
+    Returns:
+        dict: Creation status
+    """
+    try:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = sheet_name
+        
+        save_workbook_safe(wb, path)
+        
+        return {
+            "status": "success",
+            "path": str(path),
+            "sheet_name": sheet_name,
+            "message": f"New workbook created with sheet '{sheet_name}'"
+        }
+    except Exception as e:
+        raise Exception(f"Error creating workbook: {e}") from e
+
+
 def main():
     """CLI interface for xlsx_engine"""
     parser = argparse.ArgumentParser(description='Excel file manipulation engine')
@@ -278,6 +403,12 @@ def main():
     read_parser = subparsers.add_parser('read', help='Read sheet data')
     read_parser.add_argument('--path', required=True, help='Path to Excel file')
     read_parser.add_argument('--sheet', default=None, help='Sheet name (default: active sheet)')
+    read_parser.add_argument('--range', default=None, help='Cell range to read (e.g., "A1:B10", "A1", "C:C", "3:5")')
+    
+    # Create command
+    create_parser = subparsers.add_parser('create', help='Create new workbook')
+    create_parser.add_argument('--path', required=True, help='Path for new Excel file')
+    create_parser.add_argument('--sheet', default='Sheet1', help='Name for first sheet (default: Sheet1)')
     
     # Edit command
     edit_parser = subparsers.add_parser('edit', help='Edit sheet data')
@@ -297,7 +428,11 @@ def main():
     
     try:
         if args.command == 'read':
-            result = read_sheet(args.path, args.sheet)
+            result = read_sheet(args.path, args.sheet, args.range)
+            print(json.dumps(result, indent=2))
+            
+        elif args.command == 'create':
+            result = create_workbook(args.path, args.sheet)
             print(json.dumps(result, indent=2))
             
         elif args.command == 'edit':

@@ -31,6 +31,20 @@ python3 scripts/pptx_engine.py read --path FILE_PATH [--slide SLIDE_NUMBER]
 
 Returns: JSON with presentation info, slides, shapes, text content, and notes
 
+### pptx_create
+
+Create a new PowerPoint presentation.
+
+```bash
+python3 scripts/pptx_engine.py create --path FILE_PATH [--width WIDTH] [--height HEIGHT]
+```
+
+- `FILE_PATH`: Path for the new .pptx file
+- `WIDTH`: Optional slide width in inches (default: 10)
+- `HEIGHT`: Optional slide height in inches (default: 7.5)
+
+Returns: JSON with creation status and slide dimensions
+
 ### pptx_edit
 
 Update text content in specific shapes on slides.
@@ -40,7 +54,14 @@ python3 scripts/pptx_engine.py edit --path FILE_PATH --updates JSON_ARRAY
 ```
 
 - `FILE_PATH`: Path to .pptx file
-- `JSON_ARRAY`: Array of `{"slide": 1, "shape": 0, "text": "New text"}` or `{"slide": 1, "title": "New Title"}`
+- `JSON_ARRAY`: Array of update objects with various identification methods:
+  - `{"slide": 1, "title": "New Title"}` - Updates title shape (most reliable)
+  - `{"slide": 1, "shape_name": "Title 1", "text": "New text"}` - Finds by shape name (case-insensitive substring match)
+  - `{"slide": 1, "shape_text": "Old text", "text": "New text"}` - Finds by existing text content (case-insensitive substring match)
+  - `{"slide": 1, "shape": 0, "text": "New text"}` - By index (less reliable, indices can shift)
+  - `{"slide": 2, "notes": "Speaker notes"}` - Updates slide notes
+
+**Recommendation**: Use `shape_name` or `shape_text` instead of `shape` (index) for more reliable editing.
 
 Returns: JSON with updated shapes list
 
