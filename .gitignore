@@ -25,3 +25,12 @@ node_modules/
 # Task files
 # tasks.json
 # tasks/ 
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.taskmaster/
