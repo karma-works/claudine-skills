@@ -17,12 +17,6 @@ Did you know that some official Anthropic Claude skills cannot be used outside o
   - And more!
 - **No Restrictions**: You are free to modify, extend, and redistribute these tools according to their licenses.
 
-## Available Skills
-
-We are currently building out our library of tools.
-
-- **XLSX Skill**: (In Development) A powerful tool for analyzing and manipulating Excel files. See [xlsx_skill_prd.txt](file:///Users/hacr/git-repo/claudine-tools/.taskmaster/docs/xlsx_skill_prd.txt) for more details.
-
 ## License
 All skills in this repository are released under permissive licenses (e.g., MIT or Apache 2.0). See individual skill directories for specific license details.
 
