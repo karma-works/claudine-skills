@@ -3,7 +3,7 @@
 Permissively-licensed reimplementations of Anthropic Claude skills.
 
 ## The Problem
-Many Anthropic Claude skills come with restrictive licenses. For example, some can only be used within Anthropic products, and others may not be modified or used for commercial purposes without explicit permission. This creates vendor lock-in and limits the flexibility of developers who want to use these powerful capabilities in other environments.
+Did you know that some official Anthropic Claude skills cannot be used outside of Anthropic products? Some Anthropic Claude skills come with restrictive licenses. Some may not be modified or used for commercial purposes without explicit permission. This creates vendor lock-in and limits the flexibility of developers who want to use these powerful capabilities in other environments.
 
 ## The Solution
 `claudine-skills` provides high-quality, clean-room reimplementations of these skills. Our goal is to offer the same functionality as the original Anthropic skills but with **permissive licenses** that empower developers.
