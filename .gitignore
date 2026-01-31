@@ -34,3 +34,6 @@ __pycache__/
 *.so
 .Python
 .taskmaster/
+package.json
+package-lock.json
+bun.lock
